@@ -150,7 +150,7 @@ const Sidebar = () => {
         <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
           <div className="flex items-center justify-between">
             <span className="text-slate-300 font-medium truncate max-w-[120px]" title="Farmer Location">
-              📍 {typeof user?.location === 'string' ? user.location : ([user?.location?.district || user?.location?.village, user?.location?.state].filter(Boolean).join(', ') || 'Vijayawada')}
+              📍 {typeof user?.location === 'string' ? user.location : ([user?.location?.village, user?.location?.district, user?.location?.state].filter(Boolean).join(', ') || 'My Farm')}
             </span>
             <span className="text-emerald-400 font-medium flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>

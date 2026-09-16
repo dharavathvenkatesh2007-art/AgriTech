@@ -45,7 +45,7 @@ router.get('/latest', protect, async (req, res) => {
     if (soilTest) {
       res.json(soilTest);
     } else {
-      res.status(404).json({ message: 'No soil test records found for this farmer' });
+      res.json(null);
     }
   } catch (error) {
     console.error('Error fetching latest soil test:', error);

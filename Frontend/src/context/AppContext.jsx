@@ -122,11 +122,22 @@ export const AppProvider = ({ children }) => {
         method: 'PUT',
         body: JSON.stringify(profileData),
       });
+      let updatedUser = null;
       setUser(prev => {
-        const updated = { ...prev, ...data };
-        localStorage.setItem('agritech_user', JSON.stringify(updated));
-        return updated;
+        updatedUser = { ...prev, ...data };
+        localStorage.setItem('agritech_user', JSON.stringify(updatedUser));
+        return updatedUser;
       });
+      if (data.location) {
+        let farmerLocStr = '';
+        if (typeof data.location === 'string') farmerLocStr = data.location.trim();
+        else if (typeof data.location === 'object') {
+          farmerLocStr = [data.location.village, data.location.district, data.location.state].filter(Boolean).join(', ');
+        }
+        if (farmerLocStr) {
+          await fetchRealTimeWeather({ city: farmerLocStr });
+        }
+      }
     } catch (err) {
       console.error('Profile update failed:', err);
       throw err;
@@ -141,8 +152,8 @@ export const AppProvider = ({ children }) => {
       await updateProfile({ location: locObj });
       const cityStr = typeof newLocation === 'string' 
         ? newLocation 
-        : [newLocation.district || newLocation.village, newLocation.state].filter(Boolean).join(', ');
-      await fetchRealTimeWeather({ city: cityStr || 'Vijayawada' });
+        : [newLocation.village, newLocation.district, newLocation.state].filter(Boolean).join(', ');
+      await fetchRealTimeWeather({ city: cityStr });
     } catch (err) {
       console.error('Failed to update location:', err);
     }
@@ -163,7 +174,7 @@ export const AppProvider = ({ children }) => {
         if (typeof user.location === 'string') {
           farmerLocStr = user.location.trim();
         } else if (typeof user.location === 'object') {
-          farmerLocStr = [user.location.district || user.location.village, user.location.state].filter(Boolean).join(', ');
+          farmerLocStr = [user.location.village, user.location.district, user.location.state].filter(Boolean).join(', ');
         }
         if (farmerLocStr) {
           queryStr = `?city=${encodeURIComponent(farmerLocStr)}`;

@@ -115,10 +115,10 @@ const SmartMonitoring = () => {
   const forecast = weather?.forecast || [];
   const userLocStr = typeof user?.location === 'string'
     ? user.location
-    : [user?.location?.district || user?.location?.village, user?.location?.state].filter(Boolean).join(', ') || 'Vijayawada, Andhra Pradesh';
+    : [user?.location?.village, user?.location?.district, user?.location?.state].filter(Boolean).join(', ') || 'My Farm Location';
 
   const locationName = weather?.location?.name 
-    ? `${weather.location.name}, ${weather.location.state || ''}`
+    ? `${weather.location.name}${weather.location.state ? `, ${weather.location.state}` : ''}`
     : userLocStr;
 
   // Spray status color helper

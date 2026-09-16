@@ -168,7 +168,7 @@ const Home = () => {
                 <div className="flex items-center gap-2">
                   <MapPin className="h-4 w-4 text-emerald-400 shrink-0" />
                   <span className="font-bold text-sm text-white truncate">
-                    {weather?.location?.name ? `${weather.location.name}, ${weather.location.state || ''}` : `${user?.location?.district || 'Your Farm Location'}, ${user?.location?.state || 'India'}`}
+                    {weather?.location?.name ? `${weather.location.name}${weather.location.state ? `, ${weather.location.state}` : ''}` : (typeof user?.location === 'string' ? user.location : ([user?.location?.village, user?.location?.district, user?.location?.state].filter(Boolean).join(', ') || 'My Farm Location'))}
                   </span>
                 </div>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">

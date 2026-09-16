@@ -34,7 +34,7 @@ router.post('/', protect, async (req, res) => {
       owner: req.farmerId,
       farmName,
       totalAreaAcres,
-      location: location || { state: 'Andhra Pradesh', district: 'Vijayawada' },
+      location: location || { state: 'Andhra Pradesh', district: '', village: '' },
       soilType: soilType || 'Red Sandy Loam',
       irrigationSource: irrigationSource || 'Borewell',
     });

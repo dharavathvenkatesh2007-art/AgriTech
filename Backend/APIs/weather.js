@@ -79,10 +79,33 @@ const generateAgronomicAdvice = (temp, humidity, rainMm, windSpeed, locationName
 };
 
 // Geocode city/district name to coordinates using Open-Meteo API
-const geocodeLocation = async (query) => {
-  const primary = (query || 'Vijayawada').trim();
-  const searchName = primary.split(',')[0].trim();
-  const targets = [primary, searchName, 'Vijayawada', 'Hyderabad'];
+const geocodeLocation = async (query, preferredState = '', preferredDistrict = '') => {
+  const primary = (query || '').trim();
+  const parts = primary.split(',').map(p => p.trim()).filter(Boolean);
+
+  let targetState = preferredState;
+  if (!targetState && parts.length > 0) {
+    const lastPart = parts[parts.length - 1];
+    if (['Telangana', 'Andhra Pradesh', 'Karnataka', 'Tamil Nadu', 'Maharashtra', 'Odisha', 'Gujarat', 'Punjab', 'Haryana', 'Uttar Pradesh', 'Bihar', 'West Bengal', 'Kerala', 'Madhya Pradesh', 'Rajasthan'].some(s => s.toLowerCase() === lastPart.toLowerCase())) {
+      targetState = lastPart;
+    }
+  }
+  if (!targetState) {
+    targetState = parts.length > 1 ? parts[parts.length - 1] : 'Telangana';
+  }
+
+  const targetName = parts[0] || primary || 'Farmer Location';
+
+  // Build list of target queries for Open-Meteo
+  const targets = [];
+  if (primary) targets.push(primary);
+  parts.forEach(p => targets.push(p));
+  if (preferredDistrict) {
+    targets.push(preferredDistrict);
+    targets.push(`${preferredDistrict}, ${targetState}`);
+    targets.push(preferredDistrict.replace(/abub/i, 'bub'));
+  }
+  if (targetState) targets.push(targetState);
 
   for (const target of targets) {
     if (!target) continue;
@@ -94,8 +117,8 @@ const geocodeLocation = async (query) => {
       if (data.results && data.results.length > 0) {
         const loc = data.results[0];
         return {
-          name: loc.name,
-          admin1: loc.admin1 || loc.country || 'Andhra Pradesh',
+          name: targetName,
+          admin1: targetState || loc.admin1 || 'Telangana',
           country: loc.country || 'India',
           latitude: loc.latitude,
           longitude: loc.longitude,
@@ -106,13 +129,13 @@ const geocodeLocation = async (query) => {
     }
   }
 
-  // Fallback default coordinates (Vijayawada, AP)
+  // Fallback if Open-Meteo API yields no results
   return {
-    name: searchName || 'Vijayawada',
-    admin1: 'Andhra Pradesh',
+    name: targetName,
+    admin1: targetState || 'Telangana',
     country: 'India',
-    latitude: 16.5062,
-    longitude: 80.6480,
+    latitude: targetState.toLowerCase().includes('andhra') ? 16.5062 : 17.3850,
+    longitude: targetState.toLowerCase().includes('andhra') ? 80.6480 : 78.4867,
   };
 };
 
@@ -125,9 +148,11 @@ router.get('/', async (req, res) => {
     let lon = req.query.lon ? parseFloat(req.query.lon) : null;
     let queryCity = req.query.city || req.query.location;
     let resolvedLocation = null;
+    let farmerState = '';
+    let farmerDistrict = '';
 
     // Check if farmer is authenticated to use their saved profile location if no query given
-    if (!lat && !lon && !queryCity && req.headers.authorization) {
+    if (!lat && !lon && req.headers.authorization) {
       try {
         const authHeader = req.headers.authorization;
         if (authHeader.startsWith('Bearer ')) {
@@ -138,10 +163,13 @@ router.get('/', async (req, res) => {
             const farmer = await Farmer.findById(decoded.id);
             if (farmer?.location) {
               if (typeof farmer.location === 'string' && farmer.location.trim()) {
-                queryCity = farmer.location.trim();
+                if (!queryCity) queryCity = farmer.location.trim();
               } else if (typeof farmer.location === 'object') {
-                const locParts = [farmer.location.district, farmer.location.village, farmer.location.state].filter(Boolean);
-                if (locParts.length > 0) {
+                farmerState = farmer.location.state || '';
+                farmerDistrict = farmer.location.district || '';
+                const village = farmer.location.village || '';
+                const locParts = Array.from(new Set([village, farmerDistrict, farmerState].map(s => s?.trim()).filter(Boolean)));
+                if (locParts.length > 0 && !queryCity) {
                   queryCity = locParts.join(', ');
                 }
               }
@@ -156,14 +184,14 @@ router.get('/', async (req, res) => {
     if (lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon)) {
       resolvedLocation = {
         name: queryCity || 'Current GPS Location',
-        admin1: '',
+        admin1: farmerState || 'Telangana',
         country: 'India',
         latitude: lat,
         longitude: lon,
       };
     } else {
-      const searchTarget = queryCity || 'Vijayawada, Andhra Pradesh';
-      resolvedLocation = await geocodeLocation(searchTarget);
+      const searchTarget = queryCity || (farmerState ? `${farmerDistrict}, ${farmerState}` : 'Farmer Location');
+      resolvedLocation = await geocodeLocation(searchTarget, farmerState, farmerDistrict);
       lat = resolvedLocation.latitude;
       lon = resolvedLocation.longitude;
     }
@@ -175,15 +203,21 @@ router.get('/', async (req, res) => {
       return res.json(cached.data);
     }
 
-    // Call Open-Meteo with comprehensive agricultural parameters
-    const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,soil_temperature_0cm,soil_temperature_6cm,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto`;
-
-    const weatherRes = await fetch(weatherUrl);
-    if (!weatherRes.ok) {
-      throw new Error(`Open-Meteo returned status ${weatherRes.status}`);
+    // Call Open-Meteo with comprehensive agricultural parameters with 6s timeout safety
+    let omData = {};
+    try {
+      const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,soil_temperature_0cm,soil_temperature_6cm,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,uv_index&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,et0_fao_evapotranspiration&timezone=auto`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const weatherRes = await fetch(weatherUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (weatherRes.ok) {
+        omData = await weatherRes.json();
+      }
+    } catch (netErr) {
+      console.warn('Open-Meteo API fetch network warning, utilizing local regional agro-weather synthesis:', netErr.message);
     }
 
-    const omData = await weatherRes.json();
     const curr = omData.current || {};
     const daily = omData.daily || {};
 
