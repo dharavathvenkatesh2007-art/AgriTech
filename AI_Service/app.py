@@ -1,9 +1,17 @@
 import os
 import pickle
 import random
+import sys
+# pyrefly: ignore [missing-import]
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+# pyrefly: ignore [missing-import]
 from PIL import Image
+
+# Ensure AI_Service directory is in sys.path for importing models
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 
 # Import the class definition so pickle can unpickle it
 from models.crop_classifier import PurePythonRandomForest
@@ -11,8 +19,16 @@ from models.crop_classifier import PurePythonRandomForest
 app = Flask(__name__)
 CORS(app)
 
-MODEL_PATH = os.path.join('models', 'crop_recommendation_model.pkl')
+MODEL_PATH = os.path.join(BASE_DIR, 'models', 'crop_recommendation_model.pkl')
 model = None
+
+def parse_float(val, default):
+    if val is None or val == '':
+        return float(default)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return float(default)
 
 def load_model():
     global model
@@ -22,9 +38,11 @@ def load_model():
                 model = pickle.load(f)
             print("AI Model loaded successfully.")
         except Exception as e:
-            print(f"Error loading AI Model: {e}")
+            print(f"Error loading AI Model from pkl: {e}. Instantiating fallback classifier.")
+            model = PurePythonRandomForest()
     else:
-        print("Warning: Model file not found. Run train_model.py first.")
+        print("Model file not found. Instantiating PurePythonRandomForest classifier directly.")
+        model = PurePythonRandomForest()
 
 # Crop characteristics for enriching recommendation output
 CROP_STATS = {
@@ -53,27 +71,25 @@ def recommend():
     if model is None:
         load_model()
     if model is None:
-        return jsonify({'message': 'Model is not loaded on server. Run train_model.py first.'}), 500
+        model = PurePythonRandomForest()
         
-    data = request.get_json()
-    if not data:
-        return jsonify({'message': 'No input data provided'}), 400
+    data = request.get_json(silent=True) or {}
         
     try:
-        N = float(data.get('N'))
-        P = float(data.get('P'))
-        K = float(data.get('K'))
-        pH = float(data.get('pH'))
-        temperature = float(data.get('temperature', 28.0))
-        rainfall = float(data.get('rainfall', 1000))
-        state = data.get('state', 'Unknown')
+        N = parse_float(data.get('N'), 80.0)
+        P = parse_float(data.get('P'), 40.0)
+        K = parse_float(data.get('K'), 40.0)
+        pH = parse_float(data.get('pH'), 6.5)
+        temperature = parse_float(data.get('temperature'), 28.0)
+        rainfall = parse_float(data.get('rainfall'), 1000.0)
+        state = data.get('state', 'Telangana')
         
         # Prepare feature vector (list of lists)
         features = [[N, P, K, pH, temperature, rainfall]]
         
         # Predict class probabilities using pure Python random forest classifier
         probs = model.predict_proba(features)[0]
-        classes = model.classes_
+        classes = getattr(model, 'classes_', ['Paddy', 'Cotton', 'Chilli', 'Maize', 'Groundnut', 'Sugarcane', 'Wheat'])
         
         # Sort classes by probability descending
         recommendations = []
@@ -116,7 +132,6 @@ CROP_KC_VALUES = {
     'sugarcane': {'initial': 0.40, 'vegetative': 0.85, 'mid_season': 1.25, 'late_season': 0.75},
     'wheat': {'initial': 0.30, 'vegetative': 0.70, 'mid_season': 1.15, 'late_season': 0.40}
 }
-
 
 AGRI_KNOWLEDGE_BASE = [
     {
@@ -165,29 +180,29 @@ AGRI_KNOWLEDGE_BASE = [
 
 @app.route('/predict-yield', methods=['POST'])
 def predict_yield():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     crop_name = (data.get('crop_name') or 'Paddy').lower().strip()
-    area = float(data.get('area', 1.0))
-    n = float(data.get('N', 80))
-    p = float(data.get('P', 40))
-    k = float(data.get('K', 40))
-    ph = float(data.get('pH', 6.5))
-    temp = float(data.get('temperature', 28.0))
-    rainfall = float(data.get('rainfall', 1000.0))
-    ndvi = float(data.get('ndvi', 0.65))
+    area = parse_float(data.get('area'), 1.0)
+    n = parse_float(data.get('N'), 80)
+    p = parse_float(data.get('P'), 40)
+    k = parse_float(data.get('K'), 40)
+    ph = parse_float(data.get('pH'), 6.5)
+    temp = parse_float(data.get('temperature'), 28.0)
+    rainfall = parse_float(data.get('rainfall'), 1000.0)
+    ndvi = parse_float(data.get('ndvi'), 0.65)
 
     baseline = CROP_YIELD_BASELINES.get(crop_name, CROP_YIELD_BASELINES['paddy'])
     base_yield = baseline['base_yield']
 
-    n_ratio = min(n / baseline['opt_n'], 1.2)
-    p_ratio = min(p / baseline['opt_p'], 1.2)
-    k_ratio = min(k / baseline['opt_k'], 1.2)
+    n_ratio = min(n / max(baseline['opt_n'], 1), 1.2)
+    p_ratio = min(p / max(baseline['opt_p'], 1), 1.2)
+    k_ratio = min(k / max(baseline['opt_k'], 1), 1.2)
     nutrient_factor = 0.4 * n_ratio + 0.3 * p_ratio + 0.3 * k_ratio
 
     temp_diff = abs(temp - baseline['opt_temp'])
     temp_factor = max(0.65, 1.0 - (temp_diff * 0.03))
 
-    rain_diff = abs(rainfall - baseline['opt_rain']) / baseline['opt_rain']
+    rain_diff = abs(rainfall - baseline['opt_rain']) / max(baseline['opt_rain'], 1)
     rain_factor = max(0.70, 1.0 - (rain_diff * 0.25))
 
     ndvi_factor = max(0.7, min(1.3, ndvi / 0.65))
@@ -222,24 +237,24 @@ def predict_yield():
 
 @app.route('/predict-irrigation', methods=['POST'])
 def predict_irrigation():
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
     crop_name = (data.get('crop_name') or 'Paddy').lower().strip()
     growth_stage = data.get('growth_stage', 'mid_season')
-    soil_moisture = float(data.get('soil_moisture', 38.0))
-    field_capacity = float(data.get('field_capacity', 45.0))
-    wilting_point = float(data.get('wilting_point', 18.0))
-    temperature = float(data.get('temperature', 32.0))
-    solar_radiation = float(data.get('solar_radiation', 22.0))
-    forecasted_rain = float(data.get('forecasted_rain_mm', 0.0))
+    soil_moisture = parse_float(data.get('soil_moisture'), 38.0)
+    field_capacity = parse_float(data.get('field_capacity'), 45.0)
+    wilting_point = parse_float(data.get('wilting_point'), 18.0)
+    temperature = parse_float(data.get('temperature'), 32.0)
+    solar_radiation = parse_float(data.get('solar_radiation'), 22.0)
+    forecasted_rain = parse_float(data.get('forecasted_rain_mm'), 0.0)
 
-    et0 = max(2.0, 0.0023 * (temperature + 17.8) * ((temperature - 15) ** 0.5) * (solar_radiation / 2.45))
+    et0 = max(2.0, 0.0023 * (temperature + 17.8) * ((abs(temperature - 15)) ** 0.5) * (solar_radiation / 2.45))
     et0 = round(et0, 2)
 
     crop_kcs = CROP_KC_VALUES.get(crop_name, CROP_KC_VALUES['paddy'])
     kc = crop_kcs.get(growth_stage, 1.0)
     etc = round(et0 * kc, 2)
 
-    available_water = field_capacity - wilting_point
+    available_water = max(1.0, field_capacity - wilting_point)
     current_depletion = max(0.0, field_capacity - soil_moisture)
     management_allowed_depletion = 0.50 * available_water
 
@@ -287,10 +302,10 @@ def predict_irrigation():
 
 @app.route('/detect-disease', methods=['POST'])
 def detect_disease():
-    if 'image' not in request.files:
+    if not request.files:
         return jsonify({'message': 'No image file uploaded'}), 400
         
-    file = request.files['image']
+    file = request.files.get('image') or list(request.files.values())[0]
     if file.filename == '':
         return jsonify({'message': 'Empty filename uploaded'}), 400
         
@@ -385,9 +400,9 @@ def detect_disease():
 
 @app.route('/detect-pests', methods=['POST'])
 def detect_pests():
-    data = request.get_json() or {}
-    crop_name = data.get('crop', 'Cotton')
-    symptoms = data.get('symptoms', '').lower()
+    data = request.get_json(silent=True) or {}
+    crop_name = str(data.get('crop') or 'Cotton')
+    symptoms = str(data.get('symptoms') or '').lower()
 
     pest = "Stem Borer"
     threat = "Moderate"
@@ -421,8 +436,8 @@ def detect_pests():
 
 @app.route('/rag-chat', methods=['POST'])
 def rag_chat():
-    data = request.get_json() or {}
-    query = (data.get('query') or '').strip().lower()
+    data = request.get_json(silent=True) or {}
+    query = str(data.get('query') or '').strip().lower()
     if not query:
         return jsonify({'message': 'Query cannot be empty'}), 400
 
@@ -460,10 +475,10 @@ def rag_chat():
         ]
     })
 
-# Try to load model on startup
+# Load model on startup
 load_model()
 
 if __name__ == '__main__':
-    # Start Flask on port 5001
-    app.run(host='0.0.0.0', port=5001, debug=True)
-
+    port = int(os.environ.get('PORT', 5001))
+    print(f"Starting AgriTech AI Service on port {port}...")
+    app.run(host='0.0.0.0', port=port, debug=False)

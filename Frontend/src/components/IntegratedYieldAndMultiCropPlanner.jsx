@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { normalizeLocation } from '../utils/location';
 import { 
   Sprout, 
   TrendingUp, 
@@ -152,7 +153,7 @@ const CROP_CATALOG = {
 
 export default function IntegratedYieldAndMultiCropPlanner() {
   const navigate = useNavigate();
-  const { user, token, latestSoilTest, apiFetch, loadDashboard } = useApp();
+  const { user, token, latestSoilTest, apiFetch, loadDashboard, saveFarmPlan } = useApp();
 
   // Workflow Steps: 1: Soil Data Input -> 2: AI Yield Predictions -> 3: Selection & Acreage -> 4: Master Summary
   const [activeStep, setActiveStep] = useState(1);
@@ -237,12 +238,11 @@ export default function IntegratedYieldAndMultiCropPlanner() {
   const runAiYieldPredictions = async () => {
     setPredicting(true);
     try {
-      // Attempt call to Flask AI Service
+      // Attempt call to Backend AI Recommendation service
       let aiRecommendations = [];
       try {
-        const res = await fetch('http://127.0.0.1:5001/recommend', {
+        const data = await apiFetch('/predict/recommend', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             N: Number(soilData.N),
             P: Number(soilData.P),
@@ -250,16 +250,14 @@ export default function IntegratedYieldAndMultiCropPlanner() {
             pH: Number(soilData.pH),
             temperature: Number(soilData.temperature),
             rainfall: Number(soilData.rainfall),
-            state: user?.location?.state || 'Andhra Pradesh'
+            state: normalizeLocation(user?.location).state || 'Telangana'
           })
         });
-
-        if (res.ok) {
-          const data = await res.json();
-          aiRecommendations = data.recommendations || [];
+        if (data && data.recommendations) {
+          aiRecommendations = data.recommendations;
         }
       } catch (err) {
-        console.warn('Flask AI direct call skipped, using precision heuristic engine:', err);
+        console.warn('AI recommendation call handled by precision heuristic engine:', err.message);
       }
 
       // Build comprehensive crop list enriched with yield calculations
@@ -493,7 +491,8 @@ export default function IntegratedYieldAndMultiCropPlanner() {
       });
       if (data.audioUrl) {
         if (audioRef.current) {
-          audioRef.current.src = `http://localhost:5000${data.audioUrl}`;
+          const backendHost = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000').replace(/\/$/, '');
+          audioRef.current.src = `${backendHost}${data.audioUrl}`;
           audioRef.current.play().catch(e => console.log('Audio autoplay blocked'));
         }
       }
@@ -528,14 +527,22 @@ export default function IntegratedYieldAndMultiCropPlanner() {
         unit: p.unit
       }));
 
-      const res = await apiFetch('/crops/multi-plan', {
-        method: 'POST',
-        body: JSON.stringify({
+      if (saveFarmPlan) {
+        await saveFarmPlan({
           totalLandArea,
           allocations: payloadParcels,
           soilData
-        })
-      });
+        });
+      } else {
+        await apiFetch('/crops/multi-plan', {
+          method: 'POST',
+          body: JSON.stringify({
+            totalLandArea,
+            allocations: payloadParcels,
+            soilData
+          })
+        });
+      }
 
       setSaveSuccess(true);
       if (loadDashboard) loadDashboard();

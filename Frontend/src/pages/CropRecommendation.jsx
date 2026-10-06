@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { normalizeLocation } from '../utils/location';
 import { ArrowLeft, Sparkles, TrendingUp, AlertTriangle, ArrowRight, Loader2, Volume2, Check } from 'lucide-react';
 
 export default function CropRecommendation() {
@@ -41,10 +42,8 @@ export default function CropRecommendation() {
     setLoading(true);
     setError(null);
     try {
-      // Fetch recommendations directly from the Flask AI Service on port 5001
-      const response = await fetch('http://127.0.0.1:5001/recommend', {
+      const data = await apiFetch('/predict/recommend', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           N: latestSoilTest.N,
           P: latestSoilTest.P,
@@ -52,14 +51,9 @@ export default function CropRecommendation() {
           pH: latestSoilTest.pH,
           temperature: 28.5, // simulated regional temp
           rainfall: 1100, // simulated regional rainfall
-          state: user?.location?.state || 'Andhra Pradesh'
+          state: normalizeLocation(user?.location).state || 'Telangana'
         })
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'AI service failed');
-      }
 
       setRecommendations(data.recommendations || []);
       
@@ -314,4 +308,4 @@ export default function CropRecommendation() {
 }
 
 // Get API_BASE globally
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || (import.meta.env.VITE_BACKEND_URL ? `${import.meta.env.VITE_BACKEND_URL.replace(/\/$/, '')}/api` : 'http://localhost:5000/api');

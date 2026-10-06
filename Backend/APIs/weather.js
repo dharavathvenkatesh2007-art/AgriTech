@@ -181,16 +181,22 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Clean and normalize queryCity by de-duplicating comma-separated parts
+    if (queryCity && typeof queryCity === 'string') {
+      const parts = queryCity.split(',').map(p => p.trim()).filter(Boolean);
+      queryCity = Array.from(new Set(parts)).join(', ');
+    }
+
     if (lat !== null && lon !== null && !isNaN(lat) && !isNaN(lon)) {
       resolvedLocation = {
-        name: queryCity || 'Current GPS Location',
+        name: queryCity || 'Mahabubabad',
         admin1: farmerState || 'Telangana',
         country: 'India',
         latitude: lat,
         longitude: lon,
       };
     } else {
-      const searchTarget = queryCity || (farmerState ? `${farmerDistrict}, ${farmerState}` : 'Farmer Location');
+      const searchTarget = queryCity || (farmerState ? `${farmerDistrict}, ${farmerState}` : 'Mahabubabad, Telangana');
       resolvedLocation = await geocodeLocation(searchTarget, farmerState, farmerDistrict);
       lat = resolvedLocation.latitude;
       lon = resolvedLocation.longitude;

@@ -33,10 +33,18 @@ function App() {
           <Route path="/home" element={<Home />} />
           <Route path="/auth" element={<Auth />} />
           
-          {/* Combined AI Yield & Multi-Crop Land Allocation Planner */}
-          <Route path="/multi-crop-planner" element={<MultiCropPlanner />} />
-          <Route path="/crop-planner" element={<MultiCropPlanner />} />
-          <Route path="/yield-prediction" element={<MultiCropPlanner />} />
+          {/* Central AI Crop Planner & Land Allocation Module */}
+          <Route 
+            path="/crop-planner" 
+            element={
+              <ProtectedRoute>
+                <MultiCropPlanner />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="/multi-crop-planner" element={<Navigate to="/crop-planner" replace />} />
+          <Route path="/yield-prediction" element={<Navigate to="/crop-planner" replace />} />
+          <Route path="/yield-predictor" element={<Navigate to="/crop-planner" replace />} />
           
           {/* Dashboard & Autonomous Agronomic Modules */}
           <Route 
@@ -55,6 +63,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/crop-monitoring" element={<Navigate to="/monitoring" replace />} />
           <Route 
             path="/irrigation" 
             element={
@@ -71,6 +80,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/disease" element={<Navigate to="/disease-detection" replace />} />
           <Route 
             path="/ai-assistant" 
             element={
@@ -79,6 +89,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/assistant" element={<Navigate to="/ai-assistant" replace />} />
           <Route 
             path="/treatments" 
             element={
@@ -96,6 +107,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
+          <Route path="/settings" element={<Navigate to="/profile" replace />} />
           <Route 
             path="/soil-test" 
             element={
@@ -112,7 +124,7 @@ function App() {
               </ProtectedRoute>
             } 
           />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </Router>
     </AppProvider>

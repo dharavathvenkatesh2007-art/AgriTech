@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import { normalizeLocation } from '../utils/location';
 import { 
   Sprout, 
   Activity, 
   Droplets, 
   Scan, 
-  TrendingUp, 
   Bot, 
   FileText, 
   PieChart, 
@@ -14,10 +14,9 @@ import {
   User, 
   Menu, 
   X,
-  ChevronLeft,
-  ChevronRight,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Settings
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -26,16 +25,31 @@ const Sidebar = () => {
   const location = useLocation();
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
 
-  // The navigation items for AgriSmart AI
-  const navItems = [
-    { name: 'Home', path: '/home', icon: Sprout },
-    { name: 'Dashboard', path: '/dashboard', icon: Activity },
-    { name: 'Yield & Multi-Crop Planner', path: '/multi-crop-planner', icon: PieChart, altPaths: ['/yield-prediction'] },
-    { name: 'Crop Monitoring', path: '/monitoring', icon: Sprout },
-    { name: 'Smart Irrigation', path: '/irrigation', icon: Droplets },
-    { name: 'Disease & Pests', path: '/disease-detection', icon: Scan },
-    { name: 'AI Assistant', path: '/ai-assistant', icon: Bot },
-    { name: 'Treatments', path: '/treatments', icon: FileText },
+  // Grouped navigation structure (No separate Yield Predictor)
+  const navSections = [
+    {
+      title: 'MAIN',
+      items: [
+        { name: 'Dashboard', path: '/dashboard', icon: Activity },
+        { name: 'Crop Planner', path: '/crop-planner', icon: PieChart, altPaths: ['/multi-crop-planner', '/yield-prediction'] },
+        { name: 'Crop Monitoring', path: '/monitoring', icon: Sprout, altPaths: ['/crop-monitoring'] },
+        { name: 'Smart Irrigation', path: '/irrigation', icon: Droplets },
+      ]
+    },
+    {
+      title: 'FARM MANAGEMENT',
+      items: [
+        { name: 'Disease Detection', path: '/disease-detection', icon: Scan },
+        { name: 'AI Agriculture Assistant', path: '/ai-assistant', icon: Bot },
+        { name: 'Treatments', path: '/treatments', icon: FileText },
+      ]
+    },
+    {
+      title: 'SETTINGS',
+      items: [
+        { name: 'Farmer Profile', path: '/profile', icon: User },
+      ]
+    }
   ];
 
   const handleLogout = () => {
@@ -45,10 +59,10 @@ const Sidebar = () => {
 
   const NavContent = ({ isMobile = false }) => (
     <div className="flex flex-col h-full bg-slate-900 text-slate-300 border-r border-slate-800 select-none">
-      {/* Brand & Toggle Header */}
-      <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+      {/* Brand & Collapse Header */}
+      <div className="p-4 border-b border-slate-800/80 flex items-center justify-between">
         <div 
-          onClick={() => { navigate('/home'); if (isMobile) setMobileDrawerOpen(false); }} 
+          onClick={() => { navigate('/dashboard'); if (isMobile) setMobileDrawerOpen(false); }} 
           className="flex items-center space-x-3 cursor-pointer group"
         >
           <div className="p-2 bg-emerald-600 rounded-xl group-hover:bg-emerald-500 transition shadow-md shrink-0">
@@ -62,7 +76,6 @@ const Sidebar = () => {
           </div>
         </div>
 
-        {/* Close button for Mobile Drawer or Desktop Collapse */}
         {isMobile ? (
           <button 
             onClick={() => setMobileDrawerOpen(false)}
@@ -75,51 +88,56 @@ const Sidebar = () => {
           <button
             onClick={toggleSidebar}
             className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
-            title="Close / Collapse Sidebar"
+            title="Collapse Sidebar"
           >
             <PanelLeftClose className="h-5 w-5" />
           </button>
         )}
       </div>
 
-      {/* Navigation List */}
-      <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        <div className="px-3 pb-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-          Main Navigation
-        </div>
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = location.pathname === item.path || 
-            (item.altPaths && item.altPaths.includes(location.pathname)) ||
-            (item.path === '/dashboard' && location.pathname === '/');
+      {/* Navigation Groups */}
+      <nav className="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
+        {navSections.map((section) => (
+          <div key={section.title} className="space-y-1">
+            <div className="px-3 pb-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              {section.title}
+            </div>
 
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              onClick={() => { if (isMobile) setMobileDrawerOpen(false); }}
-              className={
-                `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition group ${
-                  isActive
-                    ? 'bg-emerald-600 text-white shadow-sm font-bold'
-                    : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
-                }`
-              }
-            >
-              <div className="flex items-center space-x-3">
-                <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-emerald-400'}`} />
-                <span className="truncate">{item.name}</span>
-              </div>
-              {isActive && (
-                <div className="w-1.5 h-1.5 rounded-full bg-white shrink-0"></div>
-              )}
-            </NavLink>
-          );
-        })}
+            {section.items.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path || 
+                (item.altPaths && item.altPaths.includes(location.pathname)) ||
+                (item.path === '/dashboard' && location.pathname === '/');
+
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => { if (isMobile) setMobileDrawerOpen(false); }}
+                  className={
+                    `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs transition border ${
+                      isActive
+                        ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400 font-bold shadow-xs'
+                        : 'border-transparent text-slate-300 hover:bg-slate-800/80 hover:text-white'
+                    }`
+                  }
+                >
+                  <div className="flex items-center space-x-3">
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-emerald-400'}`} />
+                    <span className="truncate">{item.name}</span>
+                  </div>
+                  {isActive && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></div>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Farmer Profile & Logout Bottom Bar */}
-      <div className="p-4 border-t border-slate-800 bg-slate-950/70">
+      <div className="p-4 border-t border-slate-800 bg-slate-950/80">
         <div className="flex items-center justify-between mb-3">
           <div 
             onClick={() => { navigate('/profile'); if (isMobile) setMobileDrawerOpen(false); }}
@@ -133,7 +151,7 @@ const Sidebar = () => {
                 {user?.name || 'Farmer'}
               </span>
               <span className="text-[10px] text-emerald-400 block truncate">
-                {user?.role === 'expert' ? 'Agricultural Expert' : 'Active Farmer'}
+                {user?.role === 'expert' ? 'Agronomist' : 'Active Farmer'}
               </span>
             </div>
           </div>
@@ -147,17 +165,17 @@ const Sidebar = () => {
           </button>
         </div>
 
-        <div className="flex flex-col gap-1.5 text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
+        <div className="flex flex-col gap-1 text-[10px] text-slate-400 pt-2 border-t border-slate-800/80">
           <div className="flex items-center justify-between">
-            <span className="text-slate-300 font-medium truncate max-w-[120px]" title="Farmer Location">
-              📍 {typeof user?.location === 'string' ? user.location : ([user?.location?.village, user?.location?.district, user?.location?.state].filter(Boolean).join(', ') || 'My Farm')}
+            <span className="text-slate-300 font-medium truncate max-w-[130px]" title="Farmer Location">
+              📍 {user?.normalizedLocation?.displayName || normalizeLocation(user?.location).displayName}
             </span>
             <span className="text-emerald-400 font-medium flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Live Weather
+              Live
             </span>
           </div>
-          <div className="flex items-center justify-between text-[10px] text-slate-500">
+          <div className="flex items-center justify-between text-[10px] text-slate-500 pt-0.5">
             <span>Lang: {user?.preferredLanguage || 'Telugu'}</span>
             <span>Land: {user?.landArea || 3.0} Acres</span>
           </div>
@@ -189,9 +207,9 @@ const Sidebar = () => {
         </button>
       )}
 
-      {/* 3. Mobile Top Header Bar with Hamburger Button */}
+      {/* 3. Mobile Header Bar with Hamburger */}
       <header className="md:hidden bg-slate-900 text-white px-4 py-3 flex items-center justify-between sticky top-0 z-40 border-b border-slate-800 shadow-md">
-        <div className="flex items-center space-x-2.5" onClick={() => navigate('/home')}>
+        <div className="flex items-center space-x-2.5" onClick={() => navigate('/dashboard')}>
           <div className="p-1.5 bg-emerald-600 rounded-lg">
             <Sprout className="h-5 w-5 text-white" />
           </div>

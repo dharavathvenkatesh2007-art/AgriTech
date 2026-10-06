@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 const AIAssistant = () => {
-  const { sidebarOpen } = useApp();
+  const { sidebarOpen, API_BASE } = useApp();
   const [messages, setMessages] = useState([
     {
       sender: 'assistant',
@@ -48,7 +48,7 @@ const AIAssistant = () => {
     setLoading(true);
 
     try {
-      const res = await fetch('http://localhost:5000/api/chat', {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

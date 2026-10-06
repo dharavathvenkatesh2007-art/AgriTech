@@ -23,11 +23,21 @@ const diseasePredictionSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  category: {
+    type: String,
+    enum: ['DISEASE', 'PEST', 'INSECT_DAMAGE', 'HEALTHY', 'UNCERTAIN'],
+    default: 'DISEASE',
+  },
   confidenceScore: {
     type: Number,
     required: true,
     min: 0,
     max: 1,
+  },
+  confidenceLevel: {
+    type: String,
+    enum: ['HIGH', 'MODERATE', 'LOW', 'VERY_LOW'],
+    default: 'MODERATE',
   },
   severity: {
     type: String,

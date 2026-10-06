@@ -1,5 +1,6 @@
 import React from 'react';
 import Navbar from '../components/Navbar';
+import HeaderBar from '../components/HeaderBar';
 import { useApp } from '../context/AppContext';
 import IntegratedYieldAndMultiCropPlanner from '../components/IntegratedYieldAndMultiCropPlanner';
 
@@ -9,6 +10,10 @@ const MultiCropPlanner = () => {
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col ${sidebarOpen ? 'md:pl-64' : 'pl-0'} transition-all duration-300`}>
       <Navbar />
+      <HeaderBar 
+        title="AI Crop Yield & Multi-Crop Acreage Planner" 
+        subtitle="Central source of crop, acreage, farm, and location intelligence" 
+      />
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <IntegratedYieldAndMultiCropPlanner />
       </main>

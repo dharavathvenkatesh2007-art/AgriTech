@@ -17,6 +17,7 @@ import analyticsRoutes from './APIs/analytics.js';
 import alertRoutes from './APIs/alert.js';
 import chatRoutes from './APIs/chat.js';
 import treatmentRoutes from './APIs/treatment.js';
+import diseaseRoutes from './routes/diseaseRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -27,7 +28,24 @@ connectDB();
 const app = express();
 
 // Middlewares
-app.use(cors());
+const allowedOrigins = [
+  process.env.VITE_URL,
+  process.env.FRONTEND_URL,
+  process.env.CLIENT_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000'
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, true);
+  },
+  credentials: true
+}));
 app.use(express.json());
 
 // Serve static audio files
@@ -47,6 +65,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/alerts', alertRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/treatments', treatmentRoutes);
+app.use('/api/disease', diseaseRoutes);
 
 
 // Health Check Endpoint

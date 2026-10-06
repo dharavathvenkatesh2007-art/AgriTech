@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import Navbar from '../components/Navbar';
+import HeaderBar from '../components/HeaderBar';
 import { 
   CloudSun, 
   Droplets, 
@@ -18,18 +19,21 @@ import {
   Volume2, 
   ArrowRight, 
   CheckCircle2,
-  BarChart3
+  BarChart3,
+  PieChart,
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import AudioPlayer from '../components/AudioPlayer';
 
 export default function Dashboard() {
-  const { user, token, activeCrop, advisories, weather, loading, loadDashboard, apiFetch, sidebarOpen } = useApp();
+  const { user, token, activeCrop, crops, farmPlan, advisories, weather, loading, loadDashboard, apiFetch, sidebarOpen } = useApp();
   const navigate = useNavigate();
 
   const [analytics, setAnalytics] = useState({
     summary: {
       totalFarms: 1,
-      totalActiveCrops: 2,
+      totalActiveCrops: 3,
       unreadAlerts: 1,
       diseaseScansPerformed: 6,
       averagePredictedYieldQuintalsPerAcre: 26.5,
@@ -42,7 +46,7 @@ export default function Dashboard() {
       labourCostReductionBenchmarkPct: 35.0,
       pesticideOptimizationPct: 28.5,
       soilHealthIndex: 'Optimal (78/100)',
-      benchmarkAttribution: 'Metrics reference published precision agriculture pilot deployments (40% yield increase, 30% water reduction, 35% labour reduction).'
+      benchmarkAttribution: 'Metrics reference published precision agriculture pilot deployments.'
     }
   });
 
@@ -66,53 +70,35 @@ export default function Dashboard() {
     }
   };
 
-  const userLocStr = typeof user?.location === 'string'
-    ? user.location
-    : [user?.location?.village, user?.location?.district, user?.location?.state].filter(Boolean).join(', ') || 'My Farm Location';
+  // Land calculations
+  const totalLand = farmPlan?.totalLandArea || user?.landArea || 3.0;
+  const allocations = farmPlan?.allocations || [];
+  const allocatedAcres = allocations.reduce((sum, item) => sum + (parseFloat(item.acres) || 0), 0);
+  const remainingAcres = Math.max(0, Number((totalLand - allocatedAcres).toFixed(1)));
+
+  // Color map for donut/progress visualizer
+  const colorMap = {
+    Paddy: { bg: 'bg-emerald-500', text: 'text-emerald-600', hex: '#10b981' },
+    Cotton: { bg: 'bg-amber-500', text: 'text-amber-600', hex: '#f59e0b' },
+    Chilli: { bg: 'bg-rose-500', text: 'text-rose-600', hex: '#f43f5e' },
+    Maize: { bg: 'bg-yellow-500', text: 'text-yellow-600', hex: '#eab308' },
+    Groundnut: { bg: 'bg-orange-500', text: 'text-orange-600', hex: '#f97316' },
+    Sugarcane: { bg: 'bg-cyan-500', text: 'text-cyan-600', hex: '#06b6d4' }
+  };
 
   const weatherLocationDisplay = weather?.location?.name 
     ? `${weather.location.name}${weather.location.state ? `, ${weather.location.state}` : ''}`
-    : userLocStr;
+    : (user?.normalizedLocation?.displayName || (typeof user?.location === 'string' ? user.location : 'Mahabubabad, Telangana'));
 
   return (
     <div className={`min-h-screen bg-slate-50 flex flex-col ${sidebarOpen ? 'md:pl-64' : 'pl-0'} transition-all duration-300`}>
       <Navbar />
+      <HeaderBar 
+        title={`Welcome back, ${user?.name || 'Farmer'}`}
+        subtitle="Autonomous Agronomic Intelligence & Precision Multi-Crop Dashboard"
+      />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-
-        {/* Welcome Header Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-6 border-b border-slate-200">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-slate-900">
-                Welcome back, {user?.name || 'Farmer'}
-              </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
-                {user?.role === 'expert' ? 'Agricultural Expert' : 'Smart Farmer'}
-              </span>
-            </div>
-            <p className="text-sm text-slate-600 mt-1">
-              Autonomous Agronomic Intelligence, Real-Time Agro-Meteorology, and Predictive Decision Support
-            </p>
-          </div>
-
-          <div className="mt-4 sm:mt-0 flex items-center gap-3">
-            <button
-              onClick={() => navigate('/disease-detection')}
-              className="flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition"
-            >
-              <Scan className="h-4 w-4" />
-              <span>Scan Leaf Disease</span>
-            </button>
-            <button
-              onClick={() => navigate('/ai-assistant')}
-              className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm transition"
-            >
-              <Bot className="h-4 w-4" />
-              <span>Ask AI Agronomist</span>
-            </button>
-          </div>
-        </div>
 
         {/* Real-time Weather & Critical Alert Bar */}
         <div className="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -195,7 +181,127 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Key Operational Farm KPI Metrics */}
+        {/* Farm Land Overview & Allocation Breakdown */}
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Farm KPIs (5 cols) */}
+          <div className="lg:col-span-5 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Layers className="h-5 w-5 text-emerald-600" />
+                  Farm Overview KPIs
+                </h3>
+                <button
+                  onClick={() => navigate('/crop-planner')}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1"
+                >
+                  <span>Edit Planner</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                  <span className="text-xs text-slate-500 font-semibold uppercase block">Total Land</span>
+                  <span className="text-2xl font-black text-slate-900 mt-1 block">{totalLand} Acres</span>
+                  <span className="text-[11px] text-slate-400">Total Farm Area</span>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                  <span className="text-xs text-emerald-800 font-semibold uppercase block">Allocated Land</span>
+                  <span className="text-2xl font-black text-emerald-900 mt-1 block">{allocatedAcres} Acres</span>
+                  <span className="text-[11px] text-emerald-700 font-medium">{allocations.length} Crop Parcels</span>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+                  <span className="text-xs text-blue-800 font-semibold uppercase block">Remaining Land</span>
+                  <span className="text-2xl font-black text-blue-900 mt-1 block">{remainingAcres} Acres</span>
+                  <span className="text-[11px] text-blue-700 font-medium">{remainingAcres === 0 ? '100% Utilized' : 'Available'}</span>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-100">
+                  <span className="text-xs text-purple-800 font-semibold uppercase block">Active Crops</span>
+                  <span className="text-2xl font-black text-purple-900 mt-1 block">{allocations.length}</span>
+                  <span className="text-[11px] text-purple-700 font-medium">Multi-Crop Scheme</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Location: <strong>{weatherLocationDisplay}</strong></span>
+              <span className="text-emerald-600 font-semibold">Single Source Synced</span>
+            </div>
+          </div>
+
+          {/* Interactive Land Allocation Breakdown Visualization (7 cols) */}
+          <div className="lg:col-span-7 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <PieChart className="h-5 w-5 text-emerald-600" />
+                  Multi-Crop Acreage Allocation Visualization
+                </h3>
+                <span className="text-xs font-bold text-slate-500">
+                  Total: {totalLand} Acres
+                </span>
+              </div>
+
+              {/* Progress Allocation Bar */}
+              <div className="mt-5">
+                <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                  {allocations.map((item, idx) => {
+                    const acres = parseFloat(item.acres) || 0;
+                    const pct = totalLand > 0 ? (acres / totalLand) * 100 : 0;
+                    const style = colorMap[item.cropKey] || { bg: 'bg-emerald-500' };
+                    return (
+                      <div
+                        key={idx}
+                        style={{ width: `${pct}%` }}
+                        className={`${style.bg} h-full border-r border-white/20 transition-all duration-300`}
+                        title={`${item.cropKey}: ${acres} Acres (${pct.toFixed(1)}%)`}
+                      ></div>
+                    );
+                  })}
+                  {remainingAcres > 0 && (
+                    <div
+                      style={{ width: `${(remainingAcres / totalLand) * 100}%` }}
+                      className="bg-slate-200 h-full border-r border-white/20"
+                      title={`Unallocated: ${remainingAcres} Acres`}
+                    ></div>
+                  )}
+                </div>
+              </div>
+
+              {/* Legend & Parcel Details */}
+              <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {allocations.map((item, idx) => {
+                  const acres = parseFloat(item.acres) || 0;
+                  const pct = totalLand > 0 ? ((acres / totalLand) * 100).toFixed(0) : 0;
+                  const style = colorMap[item.cropKey] || { bg: 'bg-emerald-500', text: 'text-emerald-600' };
+
+                  return (
+                    <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-3">
+                      <span className={`w-3 h-3 rounded-full ${style.bg} shrink-0`}></span>
+                      <div className="overflow-hidden">
+                        <span className="text-xs font-bold text-slate-900 block truncate">{item.cropKey}</span>
+                        <span className="text-[11px] text-slate-500 font-medium">{acres} Acres ({pct}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>All 3 modules (Planner, Monitoring, Irrigation) use this exact land split</span>
+              <button
+                onClick={() => navigate('/crop-planner')}
+                className="text-xs font-bold text-emerald-700 hover:underline"
+              >
+                Re-allocate Acres →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Primary Agronomic KPI Metrics */}
         <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Crop Health */}
           <div 
@@ -399,7 +505,7 @@ export default function Dashboard() {
             </div>
 
             <div 
-              onClick={() => navigate('/yield-prediction')}
+              onClick={() => navigate('/crop-planner')}
               className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer group"
             >
               <div className="flex items-center justify-between">
@@ -408,7 +514,7 @@ export default function Dashboard() {
                 </div>
                 <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-amber-600 transition" />
               </div>
-              <h4 className="text-base font-bold text-slate-900 mt-3">AI Yield Forecasting</h4>
+              <h4 className="text-base font-bold text-slate-900 mt-3">Crop Yield & Profit Planner</h4>
               <p className="text-xs text-slate-500 mt-1">Simulate expected quintals/acre based on soil nutrients, rainfall, and thermal units.</p>
             </div>
 

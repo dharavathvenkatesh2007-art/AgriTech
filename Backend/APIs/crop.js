@@ -121,6 +121,119 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
+// @desc    Get active farm plan for logged-in farmer
+// @route   GET /api/crops/my-plan
+// @access  Private
+router.get('/my-plan', protect, async (req, res) => {
+  try {
+    const activeCrops = await Crop.find({ farmer: req.farmerId, active: true }).sort({ createdAt: -1 });
+    const farmer = await Farmer.findById(req.farmerId);
+    
+    const allocations = activeCrops.map(c => ({
+      id: c._id,
+      cropKey: c.cropName,
+      cropName: c.cropName,
+      acres: c.area,
+      variety: c.variety,
+      sowingDate: c.sowingDate,
+      expectedHarvest: c.expectedHarvest
+    }));
+
+    res.json({
+      totalLandArea: farmer?.landArea || (allocations.reduce((s, a) => s + (a.acres || 0), 0) || 3.0),
+      allocations,
+      lastUpdated: activeCrops[0]?.updatedAt || new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error fetching my-plan:', error);
+    res.status(500).json({ message: 'Server error fetching crop plan', error: error.message });
+  }
+});
+
+// @desc    Register a multi-crop land plan
+// @route   POST /api/crops/multi-plan
+// @access  Private
+router.post('/multi-plan', protect, async (req, res) => {
+  const { totalLandArea, allocations, soilData } = req.body;
+  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
+    return res.status(400).json({ message: 'Allocations array is required' });
+  }
+
+  try {
+    // Archive previous active crops for this farmer
+    await Crop.updateMany({ farmer: req.farmerId, active: true }, { active: false });
+
+    let linkedSoilTest = null;
+    if (soilData) {
+      linkedSoilTest = await SoilTest.create({
+        farmer: req.farmerId,
+        N: Number(soilData.N) || 80,
+        P: Number(soilData.P) || 40,
+        K: Number(soilData.K) || 40,
+        pH: Number(soilData.pH) || 6.5,
+        soilType: soilData.soilType || 'Loamy',
+      });
+    }
+
+    const createdCrops = [];
+    for (const item of allocations) {
+      const cropName = item.cropKey || item.cropName || 'Paddy';
+      const area = parseFloat(item.acres || item.area) || 1.0;
+      
+      let durationDays = 110;
+      const nameLower = cropName.trim().toLowerCase();
+      if (nameLower.includes('cotton')) durationDays = 120;
+      else if (nameLower.includes('maize')) durationDays = 100;
+      else if (nameLower.includes('chilli')) durationDays = 130;
+      else if (nameLower.includes('sugarcane')) durationDays = 300;
+
+      const sowDate = new Date();
+      const expectedHarvest = new Date(sowDate);
+      expectedHarvest.setDate(expectedHarvest.getDate() + durationDays);
+
+      const crop = await Crop.create({
+        farmer: req.farmerId,
+        cropName,
+        variety: item.variety || 'AI Selected High-Yield',
+        area,
+        sowingDate: sowDate,
+        expectedHarvest,
+        active: true,
+        soilTest: linkedSoilTest ? linkedSoilTest._id : undefined,
+      });
+
+      let templateKey = 'Paddy';
+      if (nameLower.includes('cotton')) templateKey = 'Cotton';
+      else if (nameLower.includes('maize')) templateKey = 'Maize';
+
+      const templates = advisoryTemplates[templateKey] || advisoryTemplates['Paddy'] || [];
+      const advisoriesToCreate = templates.map((t) => ({
+        crop: crop._id,
+        farmer: req.farmerId,
+        dayNumber: t.dayNumber,
+        type: t.type,
+        title: t.title,
+        messages: t.messages,
+        status: 'pending',
+      }));
+
+      if (advisoriesToCreate.length > 0) {
+        await Advisory.insertMany(advisoriesToCreate);
+      }
+
+      createdCrops.push(crop);
+    }
+
+    res.status(201).json({
+      message: `Multi-crop plan saved! Registered ${createdCrops.length} crop parcels.`,
+      crops: createdCrops,
+    });
+  } catch (error) {
+    console.error('Error saving multi-crop plan:', error);
+    res.status(500).json({ message: 'Server error saving multi-crop plan', error: error.message });
+  }
+});
+
 // @desc    Get crop details by ID
 // @route   GET /api/crops/:id
 // @access  Private
@@ -164,86 +277,6 @@ router.put('/:id/harvest', protect, async (req, res) => {
   } catch (error) {
     console.error('Error harvesting crop:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
-  }
-});
-
-// @desc    Register a multi-crop land plan
-// @route   POST /api/crops/multi-plan
-// @access  Private
-router.post('/multi-plan', protect, async (req, res) => {
-  const { totalLandArea, allocations, soilData } = req.body;
-  if (!allocations || !Array.isArray(allocations) || allocations.length === 0) {
-    return res.status(400).json({ message: 'Allocations array is required' });
-  }
-
-  try {
-    let linkedSoilTest = null;
-    if (soilData) {
-      linkedSoilTest = await SoilTest.create({
-        farmer: req.farmerId,
-        N: Number(soilData.N) || 80,
-        P: Number(soilData.P) || 40,
-        K: Number(soilData.K) || 40,
-        pH: Number(soilData.pH) || 6.5,
-        soilType: soilData.soilType || 'Loamy',
-      });
-    }
-
-    const createdCrops = [];
-    for (const item of allocations) {
-      const cropName = item.cropKey || item.cropName || 'Paddy';
-      const area = parseFloat(item.acres || item.area) || 1.0;
-      
-      let durationDays = 110;
-      const nameLower = cropName.trim().toLowerCase();
-      if (nameLower.includes('cotton')) durationDays = 120;
-      else if (nameLower.includes('maize')) durationDays = 100;
-      else if (nameLower.includes('chilli')) durationDays = 130;
-      else if (nameLower.includes('sugarcane')) durationDays = 300;
-
-      const sowDate = new Date();
-      const expectedHarvest = new Date(sowDate);
-      expectedHarvest.setDate(expectedHarvest.getDate() + durationDays);
-
-      const crop = await Crop.create({
-        farmer: req.farmerId,
-        cropName,
-        variety: item.variety || 'AI Selected High-Yield',
-        area,
-        sowingDate: sowDate,
-        expectedHarvest,
-        soilTest: linkedSoilTest ? linkedSoilTest._id : undefined,
-      });
-
-      let templateKey = 'Paddy';
-      if (nameLower.includes('cotton')) templateKey = 'Cotton';
-      else if (nameLower.includes('maize')) templateKey = 'Maize';
-
-      const templates = advisoryTemplates[templateKey] || advisoryTemplates['Paddy'] || [];
-      const advisoriesToCreate = templates.map((t) => ({
-        crop: crop._id,
-        farmer: req.farmerId,
-        dayNumber: t.dayNumber,
-        type: t.type,
-        title: t.title,
-        messages: t.messages,
-        status: 'pending',
-      }));
-
-      if (advisoriesToCreate.length > 0) {
-        await Advisory.insertMany(advisoriesToCreate);
-      }
-
-      createdCrops.push(crop);
-    }
-
-    res.status(201).json({
-      message: `Multi-crop plan saved! Registered ${createdCrops.length} crop parcels.`,
-      crops: createdCrops,
-    });
-  } catch (error) {
-    console.error('Error saving multi-crop plan:', error);
-    res.status(500).json({ message: 'Server error saving multi-crop plan', error: error.message });
   }
 });
 
